@@ -124,7 +124,16 @@ curl.exe -X POST "localhost:8090/api/pedidos/rafaga?cantidad=20"
 
 ### Más instancias y grupos nuevos
 
-Segunda instancia de cocina (mismo grupo, se reparten las particiones):
+La forma más fácil en Windows es el script [`instancia.cmd`](instancia.cmd) de la raíz. Abre la instancia en una ventana nueva y funciona desde CMD o PowerShell; se detiene con Ctrl+C en su ventana:
+
+```bat
+instancia.cmd cocina 8094
+instancia.cmd cocina 8095 "--spring.kafka.consumer.group-id=auditoria --spring.kafka.consumer.auto-offset-reset=latest"
+```
+
+Si `JAVA_HOME` no está definido, el script usa el JDK de NetBeans (`C:\Program Files\Apache NetBeans\jdk`).
+
+A mano, segunda instancia de cocina (mismo grupo, se reparten las particiones):
 
 ```powershell
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--server.port=8094"
