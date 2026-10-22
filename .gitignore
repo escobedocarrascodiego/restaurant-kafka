@@ -1,0 +1,14 @@
+# Compilados de Maven
+target/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+nbproject/private/
+nb-configuration.xml
+
+# Sistema y herramientas locales
+.DS_Store
+Thumbs.db
+.claude/

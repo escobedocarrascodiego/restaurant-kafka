@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Restaurante Kafka · en vivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Pagina de practica: lee el estado REAL de Kafka cada segundo.
+   Layout: barra de brokers arriba; mozo | libreta (3 bandejas) | areas. */
+:root {
+  --bg: #edf0f4; --surface: #ffffff; --surface-2: #f4f6f9; --line: #d5dbe3;
+  --fg: #16202b; --muted: #586574;
+  --accent: #c98f00; --accent-ink: #4d3600; --accent-soft: #fff1c7;
+  --ok: #1d7f52; --ok-soft: #e1f3ea; --bad: #b83224; --bad-soft: #fbe6e2;
+  --ticket: #fffcf3; --ticket-line: #e4d9bb;
+  --g1: #d2470f; --g2: #1a65c4; --g3: #2a7f3a; --g4: #8e2fa8; --g5: #0a6c7e; --g6: #a31c4b;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #10151b; --surface: #18202a; --surface-2: #1e2731; --line: #2d3946;
+  --fg: #e4eaf0; --muted: #9aa7b5;
+  --accent: #f0b429; --accent-ink: #1c1400; --accent-soft: #3a2c06;
+  --ok: #4cc38a; --ok-soft: #0f2e1f; --bad: #ff7a69; --bad-soft: #3a1612;
+  --ticket: #222b35; --ticket-line: #3a4654;
+  --g1: #ff7d47; --g2: #5aa7ff; --g3: #5fcf78; --g4: #d48af0; --g5: #3cc8da; --g6: #f26b99;
+  color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.5; padding: 20px max(16px, 2vw) 40px; }
+.wrap { max-width: 1400px; margin: 0 auto; display: grid; gap: 16px; }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(24px, 3vw, 34px); font-weight: 800; }
+h2 { font-size: 18px; font-weight: 800; }
+code, .mono { font-family: var(--f-mono); font-size: 0.92em; }
+.muted { color: var(--muted); }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; color: var(--muted); }
+a { color: inherit; }
+
+.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between; }
+.cluster { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.broker { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; display: grid; gap: 2px; min-width: 120px; }
+.broker.caido { background: var(--bad-soft); border-color: var(--bad); }
+.broker b { font-size: 14px; }
+.broker .est { font-size: 12px; font-weight: 600; color: var(--ok); }
+.broker.caido .est { color: var(--bad); }
+.broker .lid { font-size: 12px; color: var(--muted); }
+.conexion { padding: 10px 14px; border-radius: 10px; background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad); font-weight: 600; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 2fr) minmax(0, 1.35fr); gap: 16px; align-items: start; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.panel-t { display: grid; gap: 2px; }
+
+button { font: inherit; font-size: 13px; font-weight: 600; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); padding: 7px 11px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.prim { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+button:disabled { opacity: .5; cursor: wait; }
+input, select { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+input[type=number] { width: 70px; }
+.fila { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.carta { display: grid; gap: 4px; }
+.plato { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: var(--surface-2); }
+.plato input { margin: 0; accent-color: var(--accent); }
+.plato:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.plato span:first-of-type { flex: 1; }
+.precio { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.respuesta { font-family: var(--f-mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; min-height: 44px; }
+.respuesta.ok { background: var(--ok-soft); border-color: var(--ok); }
+.respuesta.error { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+.pedidos { display: grid; gap: 4px; max-height: 260px; overflow: auto; }
+.pedido { display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: 13px; padding: 5px 8px; border-radius: 6px; background: var(--surface-2); }
+.pedido .pill { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--ok-soft); color: var(--ok); }
+.pedido button { padding: 3px 9px; font-size: 12px; }
+
+.particion { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 8px; background: var(--surface-2); }
+.particion.alerta { border-color: var(--bad); }
+.p-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; }
+.reps { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; }
+.rep { font-family: var(--f-mono); font-size: 11px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); }
+.rep.lider { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.rep.fuera { text-decoration: line-through; color: var(--muted); border-style: dashed; }
+.aviso { font-size: 12px; color: var(--bad); font-weight: 600; }
+.cinta { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+.slot { display: grid; gap: 3px; justify-items: center; width: 64px; }
+.ticket { width: 64px; border: 1px solid var(--ticket-line); background: var(--ticket); border-radius: 4px; padding: 4px 5px 5px; display: grid; gap: 1px; font-family: var(--f-mono); font-size: 11px; line-height: 1.25; border-top: 3px solid var(--g1); }
+.ticket.pagado { border-top-color: var(--ok); }
+.ticket .off { color: var(--muted); font-size: 10px; }
+.ticket .ped { font-weight: 600; font-size: 12px; }
+.ticket.proxima { border: 1px dashed var(--line); background: transparent; color: var(--muted); text-align: center; min-height: 52px; place-content: center; }
+.slot.antes { width: auto; min-width: 64px; max-width: 130px; }
+.slot.antes .ticket { width: auto; border-top-color: var(--line); color: var(--muted); text-align: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; }
+.chip { font-family: var(--f-mono); font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; color: #fff; background: var(--c); white-space: nowrap; }
+.leyenda { font-size: 12px; color: var(--muted); margin: 0; }
+
+.grupo { border: 1px solid var(--line); border-left: 4px solid var(--c); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; background: var(--surface-2); }
+.g-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; }
+.g-nombre { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.estado { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); }
+.estado.ok { color: var(--ok); border-color: var(--ok); }
+.estado.warn { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.estado.off { color: var(--bad); border-color: var(--bad); }
+.insts { display: flex; flex-wrap: wrap; gap: 4px; }
+.inst { font-family: var(--f-mono); font-size: 11px; padding: 2px 7px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); }
+.inst.vacia { border-style: dashed; color: var(--muted); }
+.lags { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 4px; font-family: var(--f-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+.lag { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; display: grid; }
+.lag.pend { border-color: var(--c); }
+.lag b { font-size: 12px; }
+.lag-total { display: grid; place-content: center; text-align: center; padding: 3px 8px; border-radius: 6px; background: var(--c); color: #fff; font-weight: 600; }
+.lineas { font-family: var(--f-mono); font-size: 11px; display: grid; gap: 1px; background: #0f141a; color: #d6dde5; border-radius: 6px; padding: 6px 8px; }
+.lineas .t { color: #6f7f90; }
+.lineas div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .col-libreta { grid-column: 1 / -1; order: -1; } }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div style="display:grid; gap:4px">
+      <span class="label">En vivo · se actualiza cada segundo desde tu clúster</span>
+      <h1>Restaurante Kafka</h1>
+    </div>
+    <div class="cluster" id="cluster"></div>
+  </div>
+  <div id="conexion" class="conexion" hidden>No hay conexión con pedidos-service (:8090). ¿Está corriendo?</div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-t"><span class="label">Productor · pedidos-service :8090</span><h2>El mozo toma el pedido</h2></div>
+      <div class="fila">
+        <label for="mesa" class="muted">Mesa</label>
+        <select id="mesa"></select>
+      </div>
+      <div class="carta" id="carta" role="radiogroup" aria-label="Carta"></div>
+      <button class="prim" id="btn-crear">Enviar comanda · POST /api/pedidos</button>
+      <div class="fila">
+        <label for="cantidad" class="muted">Ráfaga de</label>
+        <input id="cantidad" type="number" min="1" max="500" value="20">
+        <button id="btn-rafaga">pedidos · POST /rafaga</button>
+      </div>
+      <span class="label">Respuesta HTTP</span>
+      <div id="respuesta" class="respuesta">Aún no enviaste nada.</div>
+      <span class="label">Pedidos de esta sesión</span>
+      <div class="pedidos" id="pedidos"></div>
+    </div>
+
+    <div class="panel col-libreta">
+      <div class="panel-t">
+        <span class="label">topic pedidos · <span id="topic-info">3 particiones · RF 3 · min.insync.replicas 2</span></span>
+        <h2>La libreta de comandas</h2>
+      </div>
+      <div id="particiones" style="display:grid; gap:8px"></div>
+      <p class="leyenda">Borde naranja = PEDIDO_CREADO, verde = PEDIDO_PAGADO. Cada etiqueta de color es el <b>offset confirmado</b> de un área: la próxima comanda que va a leer. Las comandas de antes de arrancar pedidos-service se cuentan como "anteriores".</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-t"><span class="label">Consumer groups</span><h2>Las áreas</h2></div>
+      <div id="grupos" style="display:grid; gap:8px"></div>
+      <p class="leyenda">Datos de Kafka (miembros, offsets, lag) y de cada instancia (<code>/api/historial</code>). Mismo dato que <a href="http://localhost:8080/ui/clusters/restaurante/consumer-groups" target="_blank" rel="noopener">Kafka UI → Consumers</a>.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const PLATOS = [["Lomo saltado", 38], ["Ceviche", 42], ["Ají de gallina", 32], ["Arroz chaufa", 28], ["Causa limeña", 24], ["Pollo a la brasa", 45]];
+const COLOR_FIJO = { cocina: "var(--g1)", envios: "var(--g2)", facturacion: "var(--g3)" };
+const EXTRA = ["var(--g4)", "var(--g5)", "var(--g6)"];
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let estado = null, pedidos = [], historiales = {};
+
+function colorDe(nombre) {
+  if (COLOR_FIJO[nombre]) return COLOR_FIJO[nombre];
+  let h = 0; for (const c of nombre) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return EXTRA[h % EXTRA.length];
+}
+const abrev = n => n.slice(0, 3).toUpperCase();
+
+// ---------- Mozo ----------
+$("mesa").innerHTML = Array.from({ length: 20 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join("");
+$("mesa").value = "7";
+$("carta").innerHTML = PLATOS.map(([n, p], i) => `<label class="plato"><input type="radio" name="plato" value="${n}" ${i === 3 ? "checked" : ""}><span>${n}</span><span class="precio">S/ ${p}.00</span></label>`).join("");
+
+async function llamar(url, opciones) {
+  const r = await fetch(url, opciones);
+  const texto = await r.text();
+  return { status: r.status, ok: r.ok, texto };
+}
+function mostrar(res) {
+  const r = $("respuesta");
+  r.textContent = `${res.status}\n${res.texto}`;
+  r.className = "respuesta " + (res.ok ? "ok" : "error");
+}
+async function accion(boton, fn) {
+  boton.disabled = true;
+  try { mostrar(await fn()); } catch (e) { mostrar({ status: "—", ok: false, texto: "No se pudo conectar: " + e.message }); }
+  finally { boton.disabled = false; ciclo(true); }
+}
+$("btn-crear").onclick = e => accion(e.currentTarget, () => llamar("/api/pedidos", {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ mesa: +$("mesa").value, plato: document.querySelector("input[name=plato]:checked").value })
+}));
+$("btn-rafaga").onclick = e => accion(e.currentTarget, () => llamar(`/api/pedidos/rafaga?cantidad=${Math.max(1, +$("cantidad").value || 20)}`, { method: "POST" }));
+$("pedidos").onclick = e => {
+  const b = e.target.closest("[data-pagar]");
+  if (b) accion(b, () => llamar(`/api/pedidos/${b.dataset.pagar}/pagar`, { method: "POST" }));
+};
+
+// ---------- Lectura del estado ----------
+async function cargarHistoriales() {
+  const puertos = new Set();
+  for (const g of estado.grupos) for (const m of g.miembros) {
+    const mm = /-(\d{4,5})(?:-\d+)?$/.exec(m.clientId);
+    if (mm) puertos.add(mm[1]);
+  }
+  const res = await Promise.all([...puertos].map(p => fetch(`http://localhost:${p}/api/historial`).then(r => r.json()).catch(() => null)));
+  historiales = {};
+  for (const h of res.filter(Boolean)) (historiales[h.grupo] ??= []).push(h);
+}
+
+let enCurso = false, temporizador;
+async function ciclo(inmediato) {
+  clearTimeout(temporizador);
+  if (enCurso && !inmediato) return;
+  enCurso = true;
+  try {
+    const [e, p] = await Promise.all([fetch("/api/kafka/estado").then(r => r.json()), fetch("/api/pedidos").then(r => r.json())]);
+    estado = e; pedidos = p;
+    await cargarHistoriales();
+    $("conexion").hidden = true;
+    render();
+  } catch (err) {
+    $("conexion").hidden = false;
+  } finally {
+    enCurso = false;
+    temporizador = setTimeout(ciclo, 1000);
+  }
+}
+
+// ---------- Render ----------
+function render() {
+  const vivos = new Set(estado.brokers);
+  $("cluster").innerHTML = [1, 2, 3].map(b => {
+    const lidera = estado.particiones.filter(p => p.lider === b).map(p => "P" + p.id);
+    const up = vivos.has(b);
+    return `<div class="broker ${up ? "" : "caido"}"><b>Broker ${b}</b><span class="mono muted" style="font-size:11px">kafka-${b} · :${9091 + b}</span>
+      <span class="est">${up ? "● encendido" : "● apagado"}</span><span class="lid">${up ? (lidera.length ? "líder de " + lidera.join(", ") : "sin liderazgos") : "—"}</span></div>`;
+  }).join("");
+
+  $("pedidos").innerHTML = pedidos.length ? pedidos.map(p => `<div class="pedido"><span><b>#${p.id}</b> · mesa ${p.mesa} · ${esc(p.plato)}</span>
+    ${p.pagado ? `<span class="pill">pagado</span>` : `<button data-pagar="${p.id}">Cobrar</button>`}</div>`).join("")
+    : `<span class="muted" style="font-size:13px">Todavía no hay pedidos desde que arrancó pedidos-service.</span>`;
+
+  if (!estado.particiones.length) {
+    $("particiones").innerHTML = `<div class="aviso">Kafka no responde: no se pudo describir el topic pedidos.</div>`;
+  } else {
+    $("particiones").innerHTML = estado.particiones.map(renderParticion).join("");
+  }
+  $("grupos").innerHTML = estado.grupos.length ? estado.grupos.map(renderGrupo).join("") : `<span class="muted">No hay consumer groups.</span>`;
+}
+
+function chip(g, texto, titulo) {
+  return `<span class="chip" style="--c:${colorDe(g.nombre)}" title="${esc(titulo)}">${esc(texto)}</span>`;
+}
+
+function renderParticion(p) {
+  const fin = p.fin ?? (p.enviados.length ? p.enviados[p.enviados.length - 1].offset + 1 : 0);
+  const visibles = p.enviados.filter(m => m.offset < fin);
+  const inicio = visibles.length ? visibles[0].offset : fin;
+  const off = g => g.offsets[p.id];
+  const chipsEn = o => estado.grupos.filter(g => off(g) === o).map(g => chip(g, abrev(g.nombre), `${g.nombre}: su próxima comanda es el offset ${o}`)).join("");
+  const reps = p.replicas.map(r => {
+    const cls = r === p.lider ? "lider" : p.isr.includes(r) ? "" : "fuera";
+    return `<span class="rep ${cls}">b${r}${r === p.lider ? " · líder" : ""}</span>`;
+  }).join("");
+  const alerta = p.lider == null ? "OFFLINE: la partición no tiene líder" : p.isr.length < 2 ? `ISR ${p.isr.length} &lt; min.insync.replicas 2: con acks=all rechaza escrituras` : "";
+  let cinta = "";
+  if (inicio > 0) {
+    const atras = estado.grupos.filter(g => off(g) != null && off(g) < inicio);
+    cinta += `<div class="slot antes"><div class="ticket">${inicio}<br>anteriores</div><div class="chips">${atras.map(g => chip(g, `${abrev(g.nombre)} ${off(g)}`, `${g.nombre} va en el offset ${off(g)}`)).join("")}</div></div>`;
+  }
+  for (const m of visibles) {
+    const pag = m.tipo === "PEDIDO_PAGADO";
+    cinta += `<div class="slot"><div class="ticket ${pag ? "pagado" : ""}" title="mesa ${m.mesa} · ${esc(m.plato)}"><span class="off">offset ${m.offset}</span><span class="ped">#${m.pedidoId}</span><span>${pag ? "PAGADO" : "CREADO"}</span></div><div class="chips">${chipsEn(m.offset)}</div></div>`;
+  }
+  cinta += `<div class="slot"><div class="ticket proxima">offset ${fin}<br>próxima</div><div class="chips">${chipsEn(fin)}</div></div>`;
+  return `<div class="particion ${alerta ? "alerta" : ""}">
+    <div class="p-head"><b>Bandeja · partición ${p.id}</b><div class="reps"><span class="muted">réplicas</span>${reps}<span class="muted">· ISR [${p.isr.join(",")}] · fin ${p.fin ?? "?"}</span></div></div>
+    ${alerta ? `<div class="aviso">${alerta}</div>` : ""}
+    <div class="cinta">${cinta}</div></div>`;
+}
+
+const ESTADOS = {
+  STABLE: ["ok", "atendiendo"], EMPTY: ["off", "apagada · offsets guardados"],
+  PREPARINGREBALANCE: ["warn", "rebalanceando…"], COMPLETINGREBALANCE: ["warn", "rebalanceando…"],
+  ASSIGNING: ["warn", "rebalanceando…"], RECONCILING: ["warn", "rebalanceando…"], DEAD: ["off", "eliminado"]
+};
+
+function renderGrupo(g) {
+  const color = colorDe(g.nombre);
+  const [cls, txt] = ESTADOS[g.estado.toUpperCase()] || ["", g.estado.toLowerCase()];
+  const fin = id => estado.particiones.find(p => p.id === id)?.fin;
+  let total = 0;
+  const lags = [0, 1, 2].map(id => {
+    const o = g.offsets[id], f = fin(id), l = o != null && f != null ? f - o : null;
+    total += l || 0;
+    return `<div class="lag ${l ? "pend" : ""}"><span class="muted">P${id} offset ${o ?? "—"}</span><b>lag ${l ?? "—"}</b></div>`;
+  }).join("");
+  const insts = g.miembros.length ? g.miembros.map(m => `<span class="inst ${m.particiones.length ? "" : "vacia"}">${esc(m.clientId)} → ${m.particiones.length ? "P" + m.particiones.join(", P") : "ninguna"}</span>`).join("")
+    : `<span class="inst vacia">sin instancias conectadas</span>`;
+  const lineas = (historiales[g.nombre] || []).flatMap(h => h.ultimos.map(u => ({ ...u, puerto: h.puerto })))
+    .sort((a, b) => b.hora.localeCompare(a.hora)).slice(0, 5)
+    .map(u => `<div><span class="t">${u.hora}</span> #${u.pedidoId} ${u.tipo} | partición ${u.particion} | offset ${u.offset} | :${u.puerto}</div>`).join("");
+  return `<div class="grupo" style="--c:${color}">
+    <div class="g-head"><span class="g-nombre">${chip(g, abrev(g.nombre), g.nombre)}${esc(g.nombre)}</span><span class="estado ${cls}">${esc(txt)}</span></div>
+    <div class="insts">${insts}</div>
+    <div class="lags">${lags}<div class="lag-total">lag<br>${total}</div></div>
+    ${lineas ? `<div class="lineas">${lineas}</div>` : ""}
+  </div>`;
+}
+
+ciclo();
+</script>
+</body>
+</html>
